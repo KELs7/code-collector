@@ -1,0 +1,28 @@
+# This is a comment, lines starting with # are ignored
+# Empty lines are also ignored
+
+[FOLDERS]
+# Add folder names (not paths) to ignore, one per line
+.git
+.vscode
+__pycache__
+venv
+.env
+logs
+tmp
+# Add more custom folders specific to your project below
+my_temp_build_folder
+docs # Example: Ignore the whole docs folder
+
+[PATTERNS]
+# Add filename patterns (glob style) to ignore, one per line
+# Wildcards: * matches anything, ? matches single char, [seq] matches char in seq
+# Examples:
+*.log
+*.tmp
+*.bak
+*.swp
+*~ # Common editor backup files
+secrets.json # Ignore a specific file
+*.my_custom_data
+*.test.js # Ignore test files
