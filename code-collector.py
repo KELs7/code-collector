@@ -131,8 +131,24 @@ def is_ignored(filename, ignored_patterns):
 def collect_code(root_dir, output_file, ignored_folders, ignored_patterns):
     """Traverses directories, reads code files, and appends to the output file."""
     collected_count = 0
-    print(f"Starting code collection from: '{os.path.abspath(root_dir)}'")
+    abs_root_dir = os.path.abspath(root_dir)
+    # Get the name of the directory the script is running in
+    root_folder_name = os.path.basename(abs_root_dir)
+
+    # Handle edge case where script is run from filesystem root (e.g., '/')
+    # In this case, os.path.basename might return '' or '/', we might not want a leading '/' or empty segment
+    if not root_folder_name and abs_root_dir == os.path.abspath(os.sep):
+         root_folder_name = '' # Avoid double slashes later if joining with path starting with /
+         print("Info: Running from filesystem root. Paths will not be prefixed.")
+    elif not root_folder_name:
+         # Should not happen often, but handle potential empty basename from '.'
+         root_folder_name = '.' # Use '.' explicitly if basename is empty but not root
+         print("Warning: Could not determine root folder name reliably, using '.' as prefix.")
+
+
+    print(f"Starting code collection from: '{abs_root_dir}'")
     print(f"Output will be saved to: '{output_file}'")
+    print(f"Path prefix in output file: '{root_folder_name}/' (if applicable)") # Inform user
     print("-" * 70)
     print("Ignored Folders:", ", ".join(sorted(list(ignored_folders))) if ignored_folders else "None")
     print("Ignored Patterns:", ", ".join(sorted(list(ignored_patterns))) if ignored_patterns else "None")
@@ -141,77 +157,96 @@ def collect_code(root_dir, output_file, ignored_folders, ignored_patterns):
 
     try:
         with open(output_file, 'w', encoding='utf-8') as outfile:
-            for current_dir, dirs, files in os.walk(root_dir, topdown=True):
+            # Use abs_root_dir for traversal start to ensure relpath works correctly even if root_dir='.'
+            for current_dir, dirs, files in os.walk(abs_root_dir, topdown=True):
                 # --- Folder Exclusion ---
-                # Modify dirs in-place to prevent os.walk from descending into ignored folders
-                dirs[:] = [d for d in dirs if d not in ignored_folders]
+                # Compare basenames for exclusion
+                dirs[:] = [d for d in dirs if os.path.basename(d) not in ignored_folders]
 
-                rel_dir_path = os.path.relpath(current_dir, root_dir)
-                # This check might be redundant due to modifying dirs[:] above, but safe to keep
-                if rel_dir_path != '.' and os.path.basename(current_dir) in ignored_folders:
+                # --- Current Directory Check ---
+                # Need to check if the *current directory itself* should be skipped.
+                # We need to compare the *name* of the directory being entered.
+                # os.walk yields the *path* to the directory (current_dir).
+                current_dir_basename = os.path.basename(current_dir)
+                # Avoid skipping the root folder itself based on its name if it's the starting point
+                if current_dir != abs_root_dir and current_dir_basename in ignored_folders:
+                    # If we skip here, os.walk won't descend further, but modifying dirs[:]
+                    # is the primary mechanism for pruning *before* descending.
+                    # This adds an extra layer but might be redundant if dirs[:] works perfectly.
+                    # print(f"Skipping traversal into ignored directory: {os.path.relpath(current_dir, abs_root_dir)}")
                     continue
+
 
                 for filename in files:
                     # --- File Exclusion ---
                     file_path = os.path.join(current_dir, filename)
-                    relative_path = os.path.relpath(file_path, root_dir)
+                    # Calculate path relative to the *absolute* root directory now
+                    relative_path = os.path.relpath(file_path, abs_root_dir)
 
-                    # Check if the file itself should be ignored (config, script, output)
-                    # Check relative path for config to handle it if it's not in the root_dir exactly
-                    if os.path.abspath(file_path) == os.path.abspath(os.path.join(ROOT_DIR, CONFIG_FILENAME)) or \
-                       os.path.abspath(file_path) == os.path.abspath(__file__) or \
-                       os.path.abspath(file_path) == os.path.abspath(OUTPUT_FILENAME) :
+                    # --- Construct the Desired Output Path ---
+                    # Prepend the root folder's name to the relative path
+                    # os.path.join handles cases where relative_path might be '.' or just the filename
+                    if root_folder_name and root_folder_name != '.':
+                        output_display_path = os.path.join(root_folder_name, relative_path)
+                    else:
+                         # If root_folder_name is empty (e.g. running from '/') or '.', just use relative path
+                         output_display_path = relative_path
+
+                    # Ensure consistent forward slashes for output
+                    output_display_path = output_display_path.replace(os.sep, '/')
+
+                    # --- Ignore self/config/output files ---
+                    # Check absolute paths to be safe
+                    abs_file_path = os.path.abspath(file_path)
+                    if abs_file_path == os.path.abspath(os.path.join(ROOT_DIR, CONFIG_FILENAME)) or \
+                       abs_file_path == os.path.abspath(__file__) or \
+                       abs_file_path == os.path.abspath(OUTPUT_FILENAME) :
                         continue
 
-                    # Check ignored patterns
+                    # Check ignored patterns (using the base filename)
                     if is_ignored(filename, ignored_patterns):
-                        # print(f"Skipping ignored pattern match: {relative_path}") # Debug
+                        # print(f"Skipping ignored pattern match: {output_display_path}") # Debug
                         continue
 
                     # --- File Processing ---
-                    print(f"Processing: {relative_path}")
+                    print(f"Processing: {output_display_path}") # Use the new path for logging too
                     try:
-                        # Try reading as UTF-8 first, fallback to latin-1 if that fails
-                        # 'errors=ignore' is still a final fallback within each encoding attempt
                         content = None
                         try:
                             with open(file_path, 'r', encoding='utf-8', errors='strict') as infile:
                                 content = infile.read()
                         except UnicodeDecodeError:
                             try:
-                                print(f"  Warning: Could not decode {relative_path} as UTF-8. Trying latin-1...")
+                                print(f"  Warning: Could not decode {output_display_path} as UTF-8. Trying latin-1...")
                                 with open(file_path, 'r', encoding='latin-1', errors='ignore') as infile:
                                      content = infile.read()
                             except Exception as inner_e:
-                                print(f"  Error reading file {relative_path} even with fallback: {inner_e}")
+                                print(f"  Error reading file {output_display_path} even with fallback: {inner_e}")
                                 content = f"[Error reading file content: {inner_e}]"
                         except Exception as e: # Catch other file reading errors (permissions etc.)
-                             print(f"  Error reading file {relative_path}: {e}")
+                             print(f"  Error reading file {output_display_path}: {e}")
                              content = f"[Error reading file: {e}]"
 
 
                         outfile.write("=" * 70 + "\n")
-                        # Use forward slashes for path consistency in output
-                        outfile.write(f"File: {relative_path.replace(os.sep, '/')}\n")
+                        # Use the NEW output_display_path here
+                        outfile.write(f"File: {output_display_path}\n")
                         outfile.write("=" * 70 + "\n")
                         outfile.write(content if content is not None else "[Error: Could not read file content]")
-                        # Ensure a newline exists between file content and the next header
                         if content is not None and not content.endswith('\n'):
                              outfile.write("\n")
-                        outfile.write("\n") # Add an extra newline for spacing
+                        outfile.write("\n")
                         collected_count += 1
 
-                    except Exception as e: # Catch errors during the writing phase or path manipulation
-                        print(f"  Unexpected error processing file {relative_path}: {e}")
-                        # Log error to output file as well
+                    except Exception as e:
+                        print(f"  Unexpected error processing file {output_display_path}: {e}")
                         try:
                             outfile.write("=" * 70 + "\n")
-                            outfile.write(f"File: {relative_path.replace(os.sep, '/')}\n")
+                            outfile.write(f"File: {output_display_path}\n")
                             outfile.write("=" * 70 + "\n")
                             outfile.write(f"[Unexpected error during processing: {e}]\n\n")
                         except Exception:
-                            # If we can't even write the error, just print and continue
-                             print(f"  Critical: Failed to write error message for {relative_path} to output file.")
+                             print(f"  Critical: Failed to write error message for {output_display_path} to output file.")
 
 
     except IOError as e:
@@ -220,7 +255,7 @@ def collect_code(root_dir, output_file, ignored_folders, ignored_patterns):
     except Exception as e:
         print(f"\nAn unexpected error occurred during traversal: {e}")
         import traceback
-        traceback.print_exc() # Print stack trace for debugging
+        traceback.print_exc()
         return False
 
     print("-" * 70)
