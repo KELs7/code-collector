@@ -49,18 +49,21 @@ DEFAULT_IGNORED_PATTERNS = {
     "*.webp", "*.ico",
     # --- Archives ---
     "*.zip", "*.tar", "*.gz", "*.bz2", "*.rar", "*.7z",
+    "*.whl",
     # --- Config / Data / Lock files ---
     "*.json", "*.yaml", "*.yml", "*.toml", "*.ini", "*.cfg", ".conf", # .conf might be too broad? keep for now
     "*.xml", "*.csv", "*.tsv",
     "*.lock", "yarn.lock", "package-lock.json", "composer.lock", "poetry.lock",
     ".gitignore", ".gitattributes", ".gitmodules",
     ".env", ".env.example", ".env.*",
+    ".prettierrc", ".prettierignore",
     # --- Compiled / Object / Binary / Libs ---
     "*.pyc", "*.pyo",
     "*.class", "*.jar",
     "*.o", "*.so", "*.dll", "*.a", "*.lib",
     "*.exe", "*.app", "*.dmg", "*.pkg",
     "*.pdf", "*.doc", "*.docx", "*.xls", "*.xlsx", "*.ppt", ".pptx", "*.odt", "*.ods", "*.odp",
+    "*.wasm",
     # --- Database ---
     "*.db", "*.sqlite", "*.sqlite3", "*.sql",
     # --- Other common non-code / temp ---
@@ -70,6 +73,10 @@ DEFAULT_IGNORED_PATTERNS = {
     "*.md", # Often documentation, could be included if desired by removing this
     "*.markdown",
     "*.ipynb", # Jupyter notebooks have a specific format, often not plain code
+    # --- Fonts ---
+     "*.otf",
+    # --- Typescript ---
+     "*.d.ts",
 }
 # --- End Configuration ---
 
